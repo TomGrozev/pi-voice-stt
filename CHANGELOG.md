@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty-transcription error they cause, and calls out virtual devices
   (ZoomAudioDevice, BlackHole, OBS) that can occupy `:0` on macOS.
 
+### Fixed
+
+- Windows `ffmpeg` capture no longer produces 0-byte WAV files: stopping a
+  recording now signals ffmpeg through stdin (`"q\n"`) on Windows instead of
+  `SIGINT` (which maps to `TerminateProcess` and kills ffmpeg before it can
+  flush the WAV buffers). DirectShow captures also use `-audio_buffer_size 20`
+  for lower startup latency. (#19, @NeetigyaShah)
+- The editor wrapper now transparently forwards unknown editor methods to the
+  wrapped base editor (including `setUseTerminalCursor`) so host-side editor
+  API additions keep working, and startup guards `ctx.ui.getEditorComponent` /
+  `ctx.ui.setEditorComponent` with a warning when the host UI lacks them.
+  The dictation toggle is debounced (400 ms) against rapid double-events.
+  (#19, @NeetigyaShah)
+
 ## [0.6.0] - 2026-08-09
 
 ### Added
