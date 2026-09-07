@@ -33,13 +33,14 @@ export const createFfmpegRecorder = (config: FfmpegCaptureConfig): AudioRecorder
   start() {
     const tempDir = mkdtempSync(join(tmpdir(), "pi-voice-stt-"));
     const outputPath = join(tempDir, "recording.wav");
-    const process = spawn(config.ffmpegPath, [
+    const isDshow = config.inputFormat === "dshow";
+    const args = [
       "-hide_banner",
-      "-nostdin",
       "-loglevel",
       "warning",
       "-f",
       config.inputFormat,
+      ...(isDshow ? ["-audio_buffer_size", "20"] : []),
       "-i",
       config.input,
       "-vn",
@@ -51,22 +52,32 @@ export const createFfmpegRecorder = (config: FfmpegCaptureConfig): AudioRecorder
       String(config.channels),
       "-y",
       outputPath,
-    ], {
-      stdio: ["ignore", "ignore", "pipe"],
+    ];
+    const child = spawn(config.ffmpegPath, args, {
+      stdio: ["pipe", "ignore", "pipe"],
     });
 
-    const getStderr = collectStderr(process.stderr);
-    const exited = waitForExit(process);
+    const getStderr = collectStderr(child.stderr);
+    const exited = waitForExit(child);
     let stopped = false;
 
     const terminate = () => {
-      if (process.exitCode !== null) return;
-      try { process.kill("SIGINT"); } catch { /* already dead */ }
+      if (child.exitCode !== null) return;
+      if (process.platform === "win32") {
+        try {
+          if (child.stdin && !child.stdin.destroyed && child.stdin.writable) {
+            child.stdin.write("q\n");
+            child.stdin.end();
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+      try { child.kill("SIGINT"); } catch { /* already dead */ }
     };
 
     const forceKill = () => {
-      if (process.exitCode !== null) return;
-      try { process.kill("SIGKILL"); } catch { /* already dead */ }
+      if (child.exitCode !== null) return;
+      try { child.kill("SIGKILL"); } catch { /* already dead */ }
     };
 
     const stop = async () => {
@@ -74,7 +85,6 @@ export const createFfmpegRecorder = (config: FfmpegCaptureConfig): AudioRecorder
         stopped = true;
         terminate();
       }
-
       const killTimer = setTimeout(forceKill, 3000);
       const exitResult = await exited;
       clearTimeout(killTimer);
@@ -105,7 +115,6 @@ export const createFfmpegRecorder = (config: FfmpegCaptureConfig): AudioRecorder
             truncate(stderrText),
         );
       }
-
       return outputPath;
     };
 
